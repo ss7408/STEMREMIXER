@@ -1,150 +1,305 @@
 // musicTheory.js
-// The "intelligence" behind Hook's harmonic layer. Everything the UI uses to
-// decide whether two sounds belong together, and how far to nudge a sample so
-// it does, lives here. Pure functions, no audio — easy to test and swap.
+// Harmonic intelligence for Mosaic.
+// Pure functions only: no audio, no UI state, no side effects.
 
 export const NOTE_NAMES = [
   "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 
-// Pretty names with flats where producers expect them.
+// Producer-friendly display names.
 const PRETTY = {
-  "C#": "C#", "D#": "Eb", "F#": "F#", "G#": "Ab", "A#": "Bb",
+  "C#": "C#",
+  "D#": "Eb",
+  "F#": "F#",
+  "G#": "Ab",
+  "A#": "Bb",
 };
 
+export const MODES = {
+  MAJOR: "maj",
+  MINOR: "min",
+};
+
+export const COMPATIBILITY_SCORES = {
+  UNKNOWN: 50,
+  SAME_KEY: 100,
+  RELATIVE_MAJOR_MINOR: 88,
+  ADJACENT_SAME_MODE: 84,
+  ADJACENT_DIAGONAL: 70,
+  TWO_AWAY_SAME_MODE: 58,
+  TWO_AWAY_DIAGONAL: 48,
+  DISTANT_BASE: 46,
+  DISTANT_STEP_PENALTY: 7,
+  DISTANT_MINIMUM: 8,
+};
+
+// Pitch-shift modes.
+// Normal should preserve audio quality better.
+// Aggressive is useful for creative/sample-flipping modes.
+export const PITCH_SHIFT_RANGES = {
+  normal: { min: -3, max: 3 },
+  aggressive: { min: -7, max: 7 },
+};
+
+export function normalizePitchClass(pitchClass) {
+  return ((pitchClass % 12) + 12) % 12;
+}
+
+export function isValidKey(key) {
+  return (
+    key &&
+    Number.isInteger(key.tonic) &&
+    key.tonic >= 0 &&
+    key.tonic <= 11 &&
+    (key.mode === MODES.MAJOR || key.mode === MODES.MINOR)
+  );
+}
+
 export function noteName(pitchClass) {
-  const raw = NOTE_NAMES[((pitchClass % 12) + 12) % 12];
+  if (!Number.isFinite(pitchClass)) return "—";
+
+  const raw = NOTE_NAMES[normalizePitchClass(pitchClass)];
   return PRETTY[raw] || raw;
 }
 
-// A "key" is { tonic: 0-11, mode: 'maj' | 'min' }.
+// A key is { tonic: 0-11, mode: "maj" | "min" }.
 export function keyLabel(key) {
-  if (!key) return "—";
-  return `${noteName(key.tonic)} ${key.mode === "min" ? "min" : "maj"}`;
+  if (!isValidKey(key)) return "—";
+
+  return `${noteName(key.tonic)} ${key.mode === MODES.MINOR ? "min" : "maj"}`;
 }
 
 export function keyShort(key) {
-  if (!key) return "—";
-  return `${noteName(key.tonic)}${key.mode === "min" ? "m" : ""}`;
+  if (!isValidKey(key)) return "—";
+
+  return `${noteName(key.tonic)}${key.mode === MODES.MINOR ? "m" : ""}`;
 }
 
 // --- Camelot wheel -------------------------------------------------------
-// The DJ-standard harmonic mixing wheel. Maps every key to a clock position
-// (1-12) and a letter (A = minor, B = major). Adjacent positions and the
-// relative major/minor are the "compatible" moves.
+// DJ-standard harmonic mixing wheel.
+// A = minor, B = major.
 // Built from the canonical wheel: 8B = C major, 8A = A minor.
+
 const CAMELOT = (() => {
-  // [tonic, mode] -> { num, letter }
   const map = {};
-  // Major keys around the wheel, starting at 8B = C major, moving by +7 (fifths).
-  const majorOrder = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5]; // C G D A E B F# Db Ab Eb Bb F
-  // 8B is C, then each fifth up advances the wheel number by 1 (9B = G ...).
+
+  // Major keys around the wheel starting at 8B = C major.
+  // Moving by fifths advances the Camelot number.
+  const majorOrder = [
+    0,  // C
+    7,  // G
+    2,  // D
+    9,  // A
+    4,  // E
+    11, // B
+    6,  // F#
+    1,  // C#
+    8,  // G#
+    3,  // D#
+    10, // A#
+    5,  // F
+  ];
+
   majorOrder.forEach((tonic, i) => {
     const num = ((8 + i - 1) % 12) + 1;
-    map[`${tonic}-maj`] = { num, letter: "B" };
+
+    map[`${tonic}-${MODES.MAJOR}`] = {
+      num,
+      letter: "B",
+    };
+
+    // Relative minor shares the same Camelot number.
+    const relativeMinorTonic = normalizePitchClass(tonic - 3);
+
+    map[`${relativeMinorTonic}-${MODES.MINOR}`] = {
+      num,
+      letter: "A",
+    };
   });
-  // Minor keys: relative minor of each major shares the wheel number, letter A.
-  // Relative minor tonic = major tonic - 3 semitones.
-  majorOrder.forEach((tonic, i) => {
-    const num = ((8 + i - 1) % 12) + 1;
-    const minorTonic = ((tonic - 3) % 12 + 12) % 12;
-    map[`${minorTonic}-min`] = { num, letter: "A" };
-  });
+
   return map;
 })();
 
 export function camelot(key) {
-  if (!key) return null;
+  if (!isValidKey(key)) return null;
+
   return CAMELOT[`${key.tonic}-${key.mode}`] || null;
 }
 
 export function camelotLabel(key) {
   const c = camelot(key);
+
   return c ? `${c.num}${c.letter}` : "—";
 }
 
-// Shortest distance around the 12-position wheel.
 function wheelDistance(a, b) {
   const d = Math.abs(a - b) % 12;
+
   return Math.min(d, 12 - d);
 }
 
 // --- Compatibility scoring ----------------------------------------------
-// Returns 0-100. 100 = same key. The scoring mirrors how harmonic mixing
-// actually feels: relative maj/min and neighbours are nearly as good as a
-// perfect match, energy-boost (+/- a position) is fine, far keys clash.
+// Returns 0-100.
+// 100 = same key.
+// Unknown/percussive material returns neutral compatibility.
+
 export function compatibilityScore(keyA, keyB) {
-  if (!keyA || !keyB) return 50; // unknown / percussive — treat as neutral
+  if (!isValidKey(keyA) || !isValidKey(keyB)) {
+    return COMPATIBILITY_SCORES.UNKNOWN;
+  }
+
   const ca = camelot(keyA);
   const cb = camelot(keyB);
-  if (!ca || !cb) return 50;
 
-  if (ca.num === cb.num && ca.letter === cb.letter) return 100;
-  // Relative major/minor (same number, different letter)
-  if (ca.num === cb.num) return 88;
+  if (!ca || !cb) {
+    return COMPATIBILITY_SCORES.UNKNOWN;
+  }
 
-  const dist = wheelDistance(ca.num, cb.num);
+  const sameNumber = ca.num === cb.num;
   const sameLetter = ca.letter === cb.letter;
 
-  if (dist === 1 && sameLetter) return 84; // adjacent, energy move
-  if (dist === 1) return 70; // diagonal
-  if (dist === 2 && sameLetter) return 58;
-  if (dist === 2) return 48;
-  // Falls off with distance.
-  return Math.max(8, 46 - dist * 7);
+  if (sameNumber && sameLetter) {
+    return COMPATIBILITY_SCORES.SAME_KEY;
+  }
+
+  // Relative major/minor.
+  // Example: C major and A minor.
+  if (sameNumber) {
+    return COMPATIBILITY_SCORES.RELATIVE_MAJOR_MINOR;
+  }
+
+  const dist = wheelDistance(ca.num, cb.num);
+
+  if (dist === 1 && sameLetter) {
+    return COMPATIBILITY_SCORES.ADJACENT_SAME_MODE;
+  }
+
+  if (dist === 1) {
+    return COMPATIBILITY_SCORES.ADJACENT_DIAGONAL;
+  }
+
+  if (dist === 2 && sameLetter) {
+    return COMPATIBILITY_SCORES.TWO_AWAY_SAME_MODE;
+  }
+
+  if (dist === 2) {
+    return COMPATIBILITY_SCORES.TWO_AWAY_DIAGONAL;
+  }
+
+  return Math.max(
+    COMPATIBILITY_SCORES.DISTANT_MINIMUM,
+    COMPATIBILITY_SCORES.DISTANT_BASE -
+      dist * COMPATIBILITY_SCORES.DISTANT_STEP_PENALTY
+  );
 }
 
 export function compatibilityTier(score) {
-  if (score >= 86) return { tier: "perfect", label: "Locks in" };
-  if (score >= 70) return { tier: "good", label: "Plays nice" };
-  if (score >= 50) return { tier: "ok", label: "Workable" };
+  if (score >= 86) {
+    return { tier: "perfect", label: "Locks in" };
+  }
+
+  if (score >= 70) {
+    return { tier: "good", label: "Plays nice" };
+  }
+
+  if (score >= 50) {
+    return { tier: "ok", label: "Workable" };
+  }
+
   return { tier: "clash", label: "Clashes" };
 }
 
-// --- Pitch suggestion ----------------------------------------------------
-// Given a sample's key and the project key, find the smallest semitone shift
-// (within +/- 7) that maximises compatibility. Mode doesn't change under a
-// transpose, only the tonic moves. We prefer the smallest move on ties because
-// large shifts degrade audio quality (and sound less natural).
-// MAX_SHIFT caps how far we'll transpose — beyond a few semitones the granular
-// pitch-shift degrades and stops sounding natural. SHIFT_PENALTY biases toward
-// leaving a sample put: a move only wins if it improves harmonic compatibility by
-// more than the cost of moving that far. Better to leave one sound slightly off
-// than to chipmunk it.
-const MAX_SHIFT = 4;
-const SHIFT_PENALTY = 4;
-
-export function suggestPitchShift(sampleKey, projectKey) {
-  if (!sampleKey || !projectKey) return 0;
-  let best = { shift: 0, adj: compatibilityScore(sampleKey, projectKey) };
-  for (let s = -MAX_SHIFT; s <= MAX_SHIFT; s++) {
-    if (s === 0) continue;
-    const shifted = {
-      tonic: ((sampleKey.tonic + s) % 12 + 12) % 12,
-      mode: sampleKey.mode,
-    };
-    const adj = compatibilityScore(shifted, projectKey) - Math.abs(s) * SHIFT_PENALTY;
-    if (adj > best.adj || (adj === best.adj && Math.abs(s) < Math.abs(best.shift))) {
-      best = { shift: s, adj };
-    }
-  }
-  return best.shift;
-}
-
-// Transpose a key by N semitones (for previewing the result of a shift).
+// Transpose a key by N semitones.
 export function transposeKey(key, semitones) {
-  if (!key) return key;
+  if (!isValidKey(key) || !Number.isFinite(semitones)) return null;
+
   return {
-    tonic: ((key.tonic + semitones) % 12 + 12) % 12,
+    tonic: normalizePitchClass(key.tonic + semitones),
     mode: key.mode,
   };
 }
 
+// --- Pitch suggestion ----------------------------------------------------
+// Finds the best pitch shift for a sample against the project key.
+//
+// Important distinction:
+// This does not turn minor into major or major into minor.
+// It only transposes the sample while preserving its mode.
+//
+// Options:
+// - mode: "normal" | "aggressive"
+// - pitchPenalty: subtracts points for large pitch moves
+//
+// Example:
+// suggestPitchShift(sampleKey, projectKey, { mode: "normal", pitchPenalty: 4 })
+
+export function suggestPitchShift(
+  sampleKey,
+  projectKey,
+  options = {}
+) {
+  if (!isValidKey(sampleKey) || !isValidKey(projectKey)) {
+    return {
+      shift: 0,
+      score: COMPATIBILITY_SCORES.UNKNOWN,
+      rawScore: COMPATIBILITY_SCORES.UNKNOWN,
+      adjustedScore: COMPATIBILITY_SCORES.UNKNOWN,
+      resultingKey: isValidKey(sampleKey) ? sampleKey : null,
+    };
+  }
+
+  const {
+    mode = "normal",
+    pitchPenalty = 4,
+  } = options;
+
+  const range = PITCH_SHIFT_RANGES[mode] || PITCH_SHIFT_RANGES.normal;
+
+  let best = null;
+
+  for (let shift = range.min; shift <= range.max; shift++) {
+    const resultingKey = transposeKey(sampleKey, shift);
+    const rawScore = compatibilityScore(resultingKey, projectKey);
+    const adjustedScore = rawScore - Math.abs(shift) * pitchPenalty;
+
+    const candidate = {
+      shift,
+      score: rawScore,
+      rawScore,
+      adjustedScore,
+      resultingKey,
+    };
+
+    if (
+      !best ||
+      candidate.adjustedScore > best.adjustedScore ||
+      (
+        candidate.adjustedScore === best.adjustedScore &&
+        Math.abs(candidate.shift) < Math.abs(best.shift)
+      )
+    ) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+// Helper for UI copy.
+export function pitchShiftLabel(shift) {
+  if (!Number.isFinite(shift) || shift === 0) return "No shift";
+
+  return shift > 0 ? `+${shift} semitones` : `${shift} semitones`;
+}
+
+// Useful for dropdowns, testing, and key selectors.
 export const ALL_KEYS = (() => {
   const keys = [];
-  for (let t = 0; t < 12; t++) {
-    keys.push({ tonic: t, mode: "min" });
-    keys.push({ tonic: t, mode: "maj" });
+
+  for (let tonic = 0; tonic < 12; tonic++) {
+    keys.push({ tonic, mode: MODES.MINOR });
+    keys.push({ tonic, mode: MODES.MAJOR });
   }
+
   return keys;
 })();

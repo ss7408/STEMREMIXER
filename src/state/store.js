@@ -234,7 +234,8 @@ export const useStore = create((set, get) => ({
   _relock: () => {
     const { samples, projectKey, keyLock } = get();
     const next = samples.map((s) => {
-      const shift = keyLock && s.key && projectKey && keyTrusted(s) ? suggestPitchShift(s.key, projectKey) : 0;
+      // suggestPitchShift returns { shift, score, ... }; we only need the semitones.
+      const shift = keyLock && s.key && projectKey && keyTrusted(s) ? suggestPitchShift(s.key, projectKey).shift : 0;
       engine.setKeyShift(s.id, shift);
       return s.keyShift === shift ? s : { ...s, keyShift: shift };
     });
