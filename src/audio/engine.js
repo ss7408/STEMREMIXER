@@ -123,17 +123,24 @@ class SamplerEngine {
   }
 
   _applyRate(v) {
-    v.grain.playbackRate = v.loop && v.baseBpm ? this.bpm / v.baseBpm : 1;
+    // Loops stretch to the project tempo via their *effective* bar-derived tempo
+    // (set on trigger); one-shots play at their natural rate.
+    const base = v.loop ? v.effBpm || v.baseBpm : null;
+    v.grain.playbackRate = base ? this.bpm / base : 1;
   }
 
-  // Re-stamp a voice's tempo / loop flag after async (server) analysis lands, so
-  // a loop the heuristic mis-tempo'd or mis-typed corrects itself in place.
+  // Re-stamp a voice's tempo / loop flag after async (server) analysis lands.
   updateVoiceTiming(id, { baseBpm, loop } = {}) {
     const v = this.voices.get(id);
     if (!v) return;
     if (baseBpm !== undefined) v.baseBpm = baseBpm;
     if (loop !== undefined) v.loop = loop;
-    this._applyRate(v);
+    // Don't yank a voice that's already playing — changing its rate mid-loop
+    // would make it drift. The corrected tempo is recomputed on its next trigger.
+    if (!v.isPlaying) {
+      v.effBpm = null;
+      this._applyRate(v);
+    }
   }
 
   _offset(v) {
@@ -146,28 +153,46 @@ class SamplerEngine {
     const off = this._offset(v);
     v.off = off;
     if (v.loop) {
-      // Always drop in on the next downbeat so every loop is phase-locked to the
-      // grid (and to each other) from the very first cycle.
-      const t = this.ready ? Tone.getTransport().nextSubdivision("1m") : Tone.now();
       v.grain.loop = true;
-      v.grain.loopStart = off;
-      // Snap the loop region to a whole number of bars at the sample's own tempo
-      // so it never drifts out of sync over a long session.
-      let loopEnd = v.buffer.duration;
+      // Loop the whole file and snap it to a whole number of bars, then derive the
+      // *exact* tempo from the file length for that bar count. This corrects BPM-
+      // detection rounding so a loop can't drift out of sync over a long session.
+      const L = v.buffer.duration;
+      let effBpm = v.baseBpm || null;
       if (v.baseBpm) {
-        const barSec = (60 / v.baseBpm) * 4;
-        const bars = Math.max(1, Math.round((v.buffer.duration - off) / barSec));
-        loopEnd = Math.min(v.buffer.duration, off + bars * barSec);
+        const bars = Math.max(1, Math.round(L / ((60 / v.baseBpm) * 4)));
+        effBpm = (bars * 4 * 60) / L;
       }
-      v.grain.loopEnd = loopEnd;
-      v.loopSrcLen = loopEnd - off;
+      v.effBpm = effBpm;
+      v.grain.loopStart = 0;
+      v.grain.loopEnd = L;
+      v.loopSrcLen = L;
+      const rate = effBpm ? this.bpm / effBpm : 1;
+      v.grain.playbackRate = rate;
       if (v.isPlaying) {
+        const t = this.ready ? Tone.getTransport().nextSubdivision("16n") : Tone.now();
         v.grain.stop(t);
         v.isPlaying = false;
       } else {
-        v.grain.start(t, off);
+        const transport = this.ready ? Tone.getTransport() : null;
+        // If no other loop is running, anchor the grid by restarting the transport
+        // so this loop starts cleanly from its top. Otherwise leave the grid and
+        // drop in at the current phase, locking to whatever's already playing.
+        const anyLoop = [...this.voices.values()].some((o) => o !== v && o.isPlaying && o.loop);
+        if (transport && !anyLoop) transport.position = 0;
+        const t = transport ? transport.nextSubdivision("16n") : Tone.now();
+        // Snappy launch on the next 1/16, started *inside* the loop at the
+        // transport's phase so it's locked to the grid — no whole-bar wait.
+        let startOffset = 0;
+        if (transport && rate > 0) {
+          const period = L / rate; // perceived loop length — a whole number of bars
+          const transportSec = transport.seconds + (t - Tone.now());
+          startOffset = ((((transportSec % period) + period) % period) * rate) % L;
+        }
+        v.grain.start(t, startOffset);
         v.isPlaying = true;
         v.startTime = t;
+        v.phaseOffset = startOffset;
       }
     } else {
       v.grain.loop = false;
@@ -188,8 +213,11 @@ class SamplerEngine {
     if (now < v.startTime) return 0;
     const rate = v.grain.playbackRate || 1;
     if (v.loop) {
-      const L = (v.loopSrcLen || v.buffer.duration - (v.off || 0)) / rate;
-      return L > 0 ? ((now - v.startTime) % L) / L : 0;
+      const period = (v.loopSrcLen || v.buffer.duration) / rate;
+      if (period <= 0) return 0;
+      // Account for the in-phase start offset so the playhead reads true.
+      const elapsed = now - v.startTime + (v.phaseOffset || 0) / rate;
+      return (((elapsed % period) + period) % period) / period;
     }
     const L = (v.buffer.duration - (v.off || 0)) / rate;
     const p = (now - v.startTime) / L;

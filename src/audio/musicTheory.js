@@ -106,21 +106,26 @@ export function compatibilityTier(score) {
 // (within +/- 7) that maximises compatibility. Mode doesn't change under a
 // transpose, only the tonic moves. We prefer the smallest move on ties because
 // large shifts degrade audio quality (and sound less natural).
+// MAX_SHIFT caps how far we'll transpose — beyond a few semitones the granular
+// pitch-shift degrades and stops sounding natural. SHIFT_PENALTY biases toward
+// leaving a sample put: a move only wins if it improves harmonic compatibility by
+// more than the cost of moving that far. Better to leave one sound slightly off
+// than to chipmunk it.
+const MAX_SHIFT = 4;
+const SHIFT_PENALTY = 4;
+
 export function suggestPitchShift(sampleKey, projectKey) {
   if (!sampleKey || !projectKey) return 0;
-  let best = { shift: 0, score: compatibilityScore(sampleKey, projectKey) };
-  for (let s = -7; s <= 7; s++) {
+  let best = { shift: 0, adj: compatibilityScore(sampleKey, projectKey) };
+  for (let s = -MAX_SHIFT; s <= MAX_SHIFT; s++) {
     if (s === 0) continue;
     const shifted = {
       tonic: ((sampleKey.tonic + s) % 12 + 12) % 12,
       mode: sampleKey.mode,
     };
-    const score = compatibilityScore(shifted, projectKey);
-    if (
-      score > best.score ||
-      (score === best.score && Math.abs(s) < Math.abs(best.shift))
-    ) {
-      best = { shift: s, score };
+    const adj = compatibilityScore(shifted, projectKey) - Math.abs(s) * SHIFT_PENALTY;
+    if (adj > best.adj || (adj === best.adj && Math.abs(s) < Math.abs(best.shift))) {
+      best = { shift: s, adj };
     }
   }
   return best.shift;
