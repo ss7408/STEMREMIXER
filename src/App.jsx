@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react';
 import Device from "./components/Device.jsx";
 
 export default function App() {
@@ -7,6 +8,7 @@ export default function App() {
         <Device />
       </div>
       <div className="scanlines" aria-hidden="true" />
+      <Analytics />
     </>
   );
 }
