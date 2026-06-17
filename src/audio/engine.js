@@ -95,10 +95,12 @@ class SamplerEngine {
       loop: !!opts.loop,
       baseBpm: meta.bpm || null,
       trim: meta.trim || 0,
+      keyShift: 0, // auto harmonic key-lock (semitones), set by the store
+      tune: 0, // manual per-sample correction (semitones)
     };
     this.voices.set(meta.id, voice);
     this._applyRate(voice);
-    grain.detune = this.masterPitch * 100; // follow current master transpose
+    this._applyDetune(voice);
   }
 
   removeVoice(id) {
@@ -181,12 +183,33 @@ class SamplerEngine {
     });
   }
 
-  // --- master pitch (transposes everything) ---------------------------
+  // --- pitch: master transpose + per-voice key-lock + manual tune -----
+  // Each voice's detune stacks three layers: the global master transpose, the
+  // automatic harmonic key-lock shift, and a manual per-sample correction.
+  _applyDetune(v) {
+    v.grain.detune = (this.masterPitch + (v.keyShift || 0) + (v.tune || 0)) * 100;
+  }
+
+  // master transpose — moves every sample together
   setMasterPitch(semitones) {
     this.masterPitch = semitones;
-    this.voices.forEach((v) => {
-      v.grain.detune = semitones * 100;
-    });
+    this.voices.forEach((v) => this._applyDetune(v));
+  }
+
+  // auto key-lock shift for one voice (the store computes the semitones)
+  setKeyShift(id, semitones) {
+    const v = this.voices.get(id);
+    if (!v) return;
+    v.keyShift = semitones;
+    this._applyDetune(v);
+  }
+
+  // manual per-sample tuning, the "fix it if needed" override
+  setTune(id, semitones) {
+    const v = this.voices.get(id);
+    if (!v) return;
+    v.tune = semitones;
+    this._applyDetune(v);
   }
 
   // --- per-sample params ----------------------------------------------

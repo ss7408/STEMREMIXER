@@ -6,7 +6,7 @@
 export const BRAND = {
   name: "Mosaic",
   wordmark: "mosaic",
-  tagline: "Drop a folder. Build a hook.",
+  tagline: "Drop a folder. Be creative.",
   subline: "A musical intelligence layer for your messy folder of sounds.",
   // The studio surface reads like an instrument, not a file manager.
   promise: "Turn any sample folder into a playable instrument.",

@@ -34,7 +34,7 @@ export default function Library() {
         }
       }}
     >
-      <button className="lib-add" onClick={() => inputRef.current?.click()}>+ ADD SAMPLES</button>
+      <button className="lib-add" onClick={() => inputRef.current?.click()}>+ ADD FILES</button>
 
       {samples.map((s) => {
         const tm = typeMeta(s.detectedType);

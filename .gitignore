@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.local
+.vite
+
+# local reference + scratch (not app source)
+MosaicRef/
+t.cjs

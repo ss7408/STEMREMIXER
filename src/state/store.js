@@ -7,6 +7,7 @@ import * as Tone from "tone";
 import { engine } from "../audio/engine.js";
 import { analyzeBuffer } from "../audio/analyzer.js";
 import { buildDemoPack, DEMO_HOME } from "../audio/demoPack.js";
+import { suggestPitchShift, transposeKey } from "../audio/musicTheory.js";
 
 function isLoop(meta) {
   if (meta.detectedType === "fx") return false;
@@ -18,7 +19,7 @@ function enrich(meta) {
   return {
     ...meta,
     loop: isLoop(meta),
-    // per-sample params (pitch is global, see masterPitch)
+    // per-sample params (master transpose is global, see masterPitch)
     volume: 0,
     filter: 1,
     space: 0,
@@ -26,7 +27,30 @@ function enrich(meta) {
     delay: 0,
     mute: false,
     solo: false,
+    keyShift: 0, // auto harmonic lock toward the project key (semitones)
+    tune: 0, // manual per-sample correction (semitones)
   };
+}
+
+// The project key everything locks to. Default to the key shared by the most
+// samples so the fewest sounds have to move to agree.
+function pickProjectKey(samples) {
+  const counts = new Map();
+  for (const s of samples) {
+    if (!s.key) continue;
+    const k = `${s.key.tonic}-${s.key.mode}`;
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  let best = null;
+  let bestN = 0;
+  for (const [k, n] of counts) {
+    if (n > bestN) {
+      bestN = n;
+      const [tonic, mode] = k.split("-");
+      best = { tonic: +tonic, mode };
+    }
+  }
+  return best; // null when nothing is tonal (all drums / fx)
 }
 
 const SLOTS = 8;
@@ -53,6 +77,8 @@ export const useStore = create((set, get) => ({
   bpm: DEMO_HOME.bpm,
   masterPitch: 0,
   align: true,
+  projectKey: null, // the global key samples lock to
+  keyLock: true, // auto harmonic key-matching on/off
   analyzing: { active: false, total: 0, done: 0, current: "" },
 
   // --- ingestion ------------------------------------------------------
@@ -103,6 +129,8 @@ export const useStore = create((set, get) => ({
         /* skip undecodable */
       }
     }
+    if (!get().projectKey) set({ projectKey: pickProjectKey(get().samples) });
+    get()._relock();
   },
 
   _ingest: async (items) => {
@@ -118,13 +146,51 @@ export const useStore = create((set, get) => ({
       await wait(110);
     }
     await wait(360);
-    set({ view: "ready", deck: buildDeck(out), selectedId: out[0]?.id ?? null, analyzing: { active: false, total: 0, done: 0, current: "" } });
+    const projectKey = get().projectKey || pickProjectKey(out);
+    set({ view: "ready", deck: buildDeck(out), selectedId: out[0]?.id ?? null, projectKey, analyzing: { active: false, total: 0, done: 0, current: "" } });
+    get()._relock();
   },
 
   reset: () => {
     engine.stopAll();
     get().samples.forEach((s) => engine.removeVoice(s.id));
-    set({ view: "empty", samples: [], deck: [], selectedId: null, playing: {} });
+    set({ view: "empty", samples: [], deck: [], selectedId: null, playing: {}, projectKey: null });
+  },
+
+  // --- key lock: harmonically match every sample to the project key ---
+  // Smart match: samples already compatible (same key, relative major/minor,
+  // neighbours) stay put; only out-of-key sounds shift, by the smallest move.
+  // A manual per-sample `tune` rides on top so anything can be fixed by hand.
+  _relock: () => {
+    const { samples, projectKey, keyLock } = get();
+    const next = samples.map((s) => {
+      const shift = keyLock && s.key && projectKey ? suggestPitchShift(s.key, projectKey) : 0;
+      engine.setKeyShift(s.id, shift);
+      return s.keyShift === shift ? s : { ...s, keyShift: shift };
+    });
+    set({ samples: next });
+  },
+
+  setProjectKey: (key) => {
+    set({ projectKey: key });
+    get()._relock();
+  },
+  // move the whole project key up/down a semitone (re-locks every sample)
+  nudgeProjectKey: (semis) => {
+    const pk = get().projectKey;
+    if (!pk) return;
+    set({ projectKey: transposeKey(pk, semis) });
+    get()._relock();
+  },
+  toggleKeyMode: () => {
+    const pk = get().projectKey;
+    if (!pk) return;
+    set({ projectKey: { tonic: pk.tonic, mode: pk.mode === "min" ? "maj" : "min" } });
+    get()._relock();
+  },
+  toggleKeyLock: () => {
+    set({ keyLock: !get().keyLock });
+    get()._relock();
   },
 
   // --- interaction ----------------------------------------------------
@@ -148,7 +214,7 @@ export const useStore = create((set, get) => ({
   },
 
   setBpm: (bpm) => {
-    bpm = Math.max(60, Math.min(180, Math.round(bpm)));
+    bpm = Math.max(60, Math.min(200, Math.round(bpm)));
     engine.setBpm(bpm);
     set({ bpm });
   },
@@ -161,7 +227,7 @@ export const useStore = create((set, get) => ({
 
   // master transpose — moves every sample together
   setMasterPitch: (semis) => {
-    semis = Math.max(-12, Math.min(12, Math.round(semis)));
+    semis = Math.max(-24, Math.min(24, Math.round(semis)));
     engine.setMasterPitch(semis);
     set({ masterPitch: semis });
   },
@@ -189,6 +255,12 @@ export const useStore = create((set, get) => ({
   setDelay: (id, v) => {
     engine.setDelay(id, v);
     get()._patch(id, { delay: v });
+  },
+  // manual per-sample tuning — the "fix it if needed" escape hatch on key lock
+  setTune: (id, v) => {
+    v = Math.max(-12, Math.min(12, Math.round(v)));
+    engine.setTune(id, v);
+    get()._patch(id, { tune: v });
   },
 
   toggleMute: (id) => {

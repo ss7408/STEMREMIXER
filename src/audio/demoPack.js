@@ -13,7 +13,7 @@
 // buffers play back at the correct speed/pitch on any device (some default to
 // 48000). buildDemoPack(sampleRate) sets it.
 let SR = 44100;
-const HOME_BPM = 90;
+const HOME_BPM = 110;
 const beat = 60 / HOME_BPM; // seconds per beat
 const bar = beat * 4;
 

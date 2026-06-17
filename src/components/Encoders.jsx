@@ -1,5 +1,5 @@
 import { useStore } from "../state/store.js";
-import { fmtDb } from "../lib/format.js";
+import { fmtDb, fmtSemis } from "../lib/format.js";
 import AsciiBar from "./AsciiBar.jsx";
 
 // Per-sample params for the selected sample, drawn as ASCII faders. Pitch is a
@@ -14,22 +14,26 @@ export default function Encoders() {
 
   return (
     <div className={`params${on ? "" : " disabled"}`}>
-      <AsciiBar label="VOLUME" min={-40} max={6} defaultValue={0}
+      <AsciiBar label="VOLUME" min={-40} max={6} defaultValue={0} width={14}
         value={sample ? sample.volume : 0}
         onChange={on ? (v) => a.setVolume(id, v) : noop}
         format={(v) => `${fmtDb(v)}`} />
-      <AsciiBar label="FILTER" min={0} max={1} defaultValue={1}
+      <AsciiBar label="FILTER" min={0} max={1} defaultValue={1} width={14}
         value={sample ? sample.filter : 1}
         onChange={on ? (v) => a.setFilter(id, v) : noop} format={pct} />
-      <AsciiBar label="SPACE" min={0} max={1} defaultValue={0}
+      <AsciiBar label="SPACE" min={0} max={1} defaultValue={0} width={14}
         value={sample ? sample.space : 0}
         onChange={on ? (v) => a.setSpace(id, v) : noop} format={pct} />
-      <AsciiBar label="CHORUS" min={0} max={1} defaultValue={0}
+      <AsciiBar label="CHORUS" min={0} max={1} defaultValue={0} width={14}
         value={sample ? sample.chorus : 0}
         onChange={on ? (v) => a.setChorus(id, v) : noop} format={pct} />
-      <AsciiBar label="DELAY" min={0} max={1} defaultValue={0}
+      <AsciiBar label="DELAY" min={0} max={1} defaultValue={0} width={14}
         value={sample ? sample.delay : 0}
         onChange={on ? (v) => a.setDelay(id, v) : noop} format={pct} />
+      <AsciiBar label="TUNE" min={-12} max={12} defaultValue={0} width={14}
+        value={sample ? sample.tune : 0}
+        onChange={on ? (v) => a.setTune(id, v) : noop}
+        format={(v) => fmtSemis(Math.round(v))} />
     </div>
   );
 }
