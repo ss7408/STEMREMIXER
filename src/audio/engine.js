@@ -59,6 +59,29 @@ class SamplerEngine {
     this.reverb.connect(this.masterIn);
     this.chorus.connect(this.masterIn);
     this.delay.connect(this.masterIn);
+
+    // Tap for "save the take": the recorder hangs off the limiter, so what
+    // you capture is exactly what you hear (master FX + makeup + limit).
+    this.recorder = Tone.Recorder.supported ? new Tone.Recorder() : null;
+    if (this.recorder) this.limiter.connect(this.recorder);
+  }
+
+  // --- recording ------------------------------------------------------
+  async startRecord() {
+    if (!this.recorder) return false;
+    await this.unlock();
+    if (this.recorder.state === "started") return true;
+    await this.recorder.start();
+    return true;
+  }
+
+  async stopRecord() {
+    if (!this.recorder || this.recorder.state === "stopped") return null;
+    return await this.recorder.stop(); // Blob (audio/webm on Chromium)
+  }
+
+  isRecording() {
+    return !!this.recorder && this.recorder.state === "started";
   }
 
   setBpm(bpm) {

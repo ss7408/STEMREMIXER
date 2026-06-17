@@ -153,6 +153,18 @@ button:disabled { cursor: default; }
 .pill:hover:not(:disabled) { background: var(--phos); color: var(--bg); border-color: var(--phos); }
 .pill.on { background: var(--phos); color: var(--bg); border-color: var(--phos); }
 
+/* REC pill: capture the take. Idle reads as a quiet armed state; recording
+   reads loud and red so you can't miss the master bus is being saved. */
+.pill.rec { color: var(--phos-2); }
+.pill.rec.on {
+  background: #ff3838; color: #fff; border-color: #ff3838;
+  animation: rec-pulse 1.1s steps(2) infinite;
+}
+.pill.rec.on:hover { background: #ff5252; border-color: #ff5252; color: #fff; }
+@keyframes rec-pulse {
+  50% { background: #b3201f; border-color: #b3201f; }
+}
+
 /* scrubber */
 .scrub { cursor: ew-resize; user-select: none; touch-action: none; }
 .scrub:active { cursor: grabbing; }
@@ -271,6 +283,19 @@ button:disabled { cursor: default; }
 .cell-drop { margin: auto; color: var(--phos-dim); letter-spacing: 0.12em; font-size: 13px; }
 .cell.drop { background: var(--phos-faint); border-color: var(--phos); }
 .cell.muted { opacity: 0.55; }
+.cell.muted .cell-name { text-decoration: line-through; text-decoration-color: #ff3838; }
+.cell.solo { box-shadow: inset 0 0 0 2px var(--phos-2); }
+.cell.solo.on { box-shadow: inset 0 0 0 2px var(--bg); }
+.cell-flags { display: inline-flex; align-items: center; gap: 4px; }
+.flag {
+  display: inline-grid; place-items: center; min-width: 14px; height: 14px;
+  padding: 0 3px; font-size: 10px; font-weight: 700; line-height: 1;
+  font-family: var(--font-label); letter-spacing: 0;
+}
+.flag.mute { background: #ff3838; color: #fff; }
+.flag.solo { background: var(--phos-2); color: var(--bg); }
+.cell.on .flag.mute { background: #ff3838; color: #fff; }
+.cell.on .flag.solo { background: var(--bg); color: var(--phos-2); }
 .cell[draggable="true"] { cursor: grab; }
 .cell[draggable="true"]:active { cursor: grabbing; }
 .cell-ph { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--phos-dim); }
@@ -309,10 +334,21 @@ button:disabled { cursor: default; }
 .lib-row.on .lib-letter { color: var(--bg); }
 .lib-name { flex: 1; min-width: 0; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-ms { display: flex; gap: 3px; }
-.ms { width: 16px; height: 14px; display: grid; place-items: center; border: 1px solid var(--phos-dim); color: var(--phos-dim); font-size: 11px; line-height: 1; }
+.ms {
+  width: 18px; height: 16px; display: grid; place-items: center;
+  border: 1px solid var(--phos-dim); color: var(--phos-dim);
+  font-size: 11px; line-height: 1; font-weight: 700;
+}
 .ms:hover { color: var(--phos); border-color: var(--phos); }
-.ms.on { background: var(--phos); color: var(--bg); border-color: var(--phos); }
+/* Mute = red, Solo = bright phosphor. Two distinct armed states so a glance
+   tells you which is on — and both stay visible inside a playing row. */
+.ms.m.on { background: #ff3838; color: #fff; border-color: #ff3838; box-shadow: 0 0 6px rgba(255, 56, 56, 0.6); }
+.ms.s.on { background: var(--phos-2); color: var(--bg); border-color: var(--phos-2); box-shadow: 0 0 6px var(--phos-glow); }
 .lib-row.on .ms { border-color: var(--bg); color: var(--bg); }
+.lib-row.on .ms.m.on { background: #ff3838; color: #fff; border-color: #fff; }
+.lib-row.on .ms.s.on { background: var(--bg); color: var(--phos-2); border-color: var(--bg); }
+.lib-row.muted .lib-name { text-decoration: line-through; text-decoration-color: #ff3838; }
+.lib-row.solo { box-shadow: inset 0 0 0 1px var(--phos-2); }
 
 /* =====================================================================
    EMPTY (drop folder)

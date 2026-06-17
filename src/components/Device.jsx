@@ -45,6 +45,8 @@ export default function Device() {
   const toggleKeyLock = useStore((s) => s.toggleKeyLock);
   const stopAll = useStore((s) => s.stopAll);
   const reset = useStore((s) => s.reset);
+  const recording = useStore((s) => s.recording);
+  const toggleRecord = useStore((s) => s.toggleRecord);
 
   const [phos, setPhos] = useState("cyan");
   const vuRef = useRef(null);
@@ -101,6 +103,13 @@ export default function Device() {
           ALIGN {align ? "ON" : "OFF"}
         </button>
         <button className="pill" onClick={stopAll}>■ STOP</button>
+        <button
+          className={`pill rec${recording ? " on" : ""}`}
+          onClick={toggleRecord}
+          title={recording ? "Stop & download your mix" : "Record the master bus — press again to save"}
+        >
+          {recording ? "● REC" : "○ REC"}
+        </button>
 
         <span className="bar-sp" />
 

@@ -65,6 +65,7 @@ export default function SampleKeys() {
           selectedId === id ? "sel" : "",
           on ? "on" : "",
           s && s.mute ? "muted" : "",
+          s && s.solo ? "solo" : "",
           hover === slot ? "drop" : "",
         ].join(" ");
 
@@ -87,7 +88,11 @@ export default function SampleKeys() {
           >
             <div className="cell-top">
               <span className="cell-key">{KEYCAPS[slot]}</span>
-              <span className="cell-letter">[{tm ? tm.letter : "—"}]</span>
+              <span className="cell-flags">
+                {s && s.mute ? <span className="flag mute" title="Muted">M</span> : null}
+                {s && s.solo ? <span className="flag solo" title="Soloed">S</span> : null}
+                <span className="cell-letter">[{tm ? tm.letter : "—"}]</span>
+              </span>
             </div>
             {s ? (
               <>

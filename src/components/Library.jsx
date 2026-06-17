@@ -42,7 +42,7 @@ export default function Library() {
         return (
           <div
             key={s.id}
-            className={`lib-row${selectedId === s.id ? " sel" : ""}${on ? " on" : ""}${s.mute ? " muted" : ""}`}
+            className={`lib-row${selectedId === s.id ? " sel" : ""}${on ? " on" : ""}${s.mute ? " muted" : ""}${s.solo ? " solo" : ""}`}
             draggable
             onDragStart={(e) => {
               e.dataTransfer.setData("text/plain", JSON.stringify({ id: s.id, from: "lib" }));
@@ -54,8 +54,8 @@ export default function Library() {
             <span className="lib-letter">[{tm.letter}]</span>
             <span className="lib-name">{s.name}</span>
             <span className="lib-ms">
-              <button className={`ms${s.mute ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleMute(s.id); }} title="Mute">M</button>
-              <button className={`ms${s.solo ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSolo(s.id); }} title="Solo">S</button>
+              <button className={`ms m${s.mute ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleMute(s.id); }} title={s.mute ? "Muted — click to unmute" : "Mute this sample"} aria-pressed={s.mute}>M</button>
+              <button className={`ms s${s.solo ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSolo(s.id); }} title={s.solo ? "Soloed — click to clear" : "Solo this sample"} aria-pressed={s.solo}>S</button>
             </span>
           </div>
         );

@@ -145,6 +145,7 @@ export const useStore = create((set, get) => ({
   master: { saturate: 0, compress: 0, makeup: 0 }, // master-bus effects
   analyzing: { active: false, total: 0, done: 0, current: "" },
   enriching: 0, // samples still awaiting server (Python) refinement
+  recording: false, // capturing master bus to a downloadable file
 
   // --- ingestion ------------------------------------------------------
   loadDemo: async () => {
@@ -408,6 +409,31 @@ export const useStore = create((set, get) => ({
     if (!smp) return;
     engine.setSolo(id, !smp.solo);
     get()._patch(id, { solo: !smp.solo });
+  },
+
+  // --- record + save the take ----------------------------------------
+  // One toggle: first press arms the master-bus recorder, second press
+  // stops it and hands you a download of exactly what just played.
+  toggleRecord: async () => {
+    if (get().recording) {
+      const blob = await engine.stopRecord();
+      set({ recording: false });
+      if (!blob) return;
+      const ext = (blob.type && blob.type.includes("webm")) ? "webm"
+        : (blob.type && blob.type.includes("ogg")) ? "ogg"
+        : "audio";
+      const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 13); // YYYYMMDDTHHMM
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `mosaic-${stamp}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      return;
+    }
+    const started = await engine.startRecord();
+    if (started) set({ recording: true });
   },
 
   // --- arrangement: drag from library onto deck slots -----------------
