@@ -11,36 +11,25 @@ It sits behind the same stable contract analyzer.js documents — return
 `{ bpm, key, keyConfidence, detectedType }` and nothing downstream in the app
 has to change.
 
+The heavy MIR libraries are imported LAZILY (on the first /analyze), not at module
+load. librosa/numba/essentia take several seconds to import; doing that at startup
+delays the web process binding its port, which makes platforms like Railway/Render
+return 502 ("application failed to respond"). Deferring keeps boot instant and
+/health always responsive.
+
 Run:
     cd server
     python -m venv .venv && source .venv/bin/activate
     pip install -r requirements.txt
     uvicorn app:app --reload --port 8000
-
-The browser calls http://localhost:8000/analyze by default; override with the
-VITE_ANALYZE_URL env var when running `vite`, or set it to "off" to stay fully
-offline (the app then falls back to the JS heuristics, same as before).
 """
 
 import io
 import os
 import tempfile
 
-import numpy as np
-import librosa
-import soundfile as sf
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-
-# essentia is imported lazily/optionally: its wheel is fiddly on some platforms
-# (notably Apple Silicon). Tempo + type still work without it; only key falls
-# back to the browser's chroma heuristic when essentia isn't present.
-try:
-    import essentia.standard as es
-
-    HAVE_ESSENTIA = True
-except Exception:  # pragma: no cover - environment dependent
-    HAVE_ESSENTIA = False
 
 app = FastAPI(title="Mosaic analyze")
 
@@ -51,7 +40,7 @@ _origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_methods=["POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -62,9 +51,35 @@ _PITCH_CLASS = {
     "F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11,
 }
 
+# Lazily-imported heavy libs, cached after first load. _libs() is called from the
+# request path, never at import time.
+_LIBS = {}
+
+
+def _libs():
+    if not _LIBS:
+        import numpy as np
+        import librosa
+        import soundfile as sf
+
+        _LIBS["np"] = np
+        _LIBS["librosa"] = librosa
+        _LIBS["sf"] = sf
+        # essentia is optional — its wheel is fiddly on some platforms. Without it,
+        # tempo + type still work; only key falls back to the JS chroma heuristic.
+        try:
+            import essentia.standard as es
+
+            _LIBS["es"] = es
+        except Exception:
+            _LIBS["es"] = None
+    return _LIBS
+
 
 def _load_mono(data: bytes):
     """Decode arbitrary uploaded audio to a mono float32 array + sample rate."""
+    lb = _libs()
+    np, librosa, sf = lb["np"], lb["librosa"], lb["sf"]
     try:
         # soundfile handles wav/flac/ogg from memory directly.
         y, sr = sf.read(io.BytesIO(data), dtype="float32", always_2d=False)
@@ -81,6 +96,8 @@ def _load_mono(data: bytes):
 
 def detect_bpm(y, sr):
     """librosa beat tracking, folded into the app's musical range (74-168)."""
+    lb = _libs()
+    np, librosa = lb["np"], lb["librosa"]
     if y.size < sr // 2:  # under ~0.5s: not enough rhythmic content
         return None
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
@@ -96,7 +113,9 @@ def detect_bpm(y, sr):
 
 def detect_key(y, sr):
     """essentia KeyExtractor -> ({tonic,mode}, strength). None when unavailable."""
-    if not HAVE_ESSENTIA:
+    lb = _libs()
+    es, librosa = lb["es"], lb["librosa"]
+    if es is None:
         return None, None
     # KeyExtractor expects 44.1k mono; resample anything else first.
     if sr != 44100:
@@ -111,6 +130,8 @@ def detect_key(y, sr):
 
 def classify_type(y, sr):
     """Same decision ladder as classifyType() in analyzer.js, on real features."""
+    lb = _libs()
+    np, librosa = lb["np"], lb["librosa"]
     dur = y.size / sr if sr else 0
     centroid = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
     onsets = librosa.onset.onset_detect(y=y, sr=sr, units="time")
@@ -136,14 +157,17 @@ def classify_type(y, sr):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "essentia": HAVE_ESSENTIA}
+    # Trivial on purpose: touches no heavy imports, so it always answers fast and
+    # the platform healthcheck passes the moment the process is up. `loaded` shows
+    # whether the MIR libs have been pulled in yet (after the first /analyze).
+    return {"ok": True, "loaded": bool(_LIBS), "essentia": bool(_LIBS.get("es"))}
 
 
 @app.post("/analyze")
 def analyze(file: UploadFile = File(...)):
-    # Sync `def` on purpose: FastAPI runs sync path operations in a threadpool, so
-    # several uploads analyze in parallel. librosa/essentia are CPU-bound and would
-    # block the event loop if this were `async def`, serializing every request.
+    # Sync `def` on purpose: FastAPI runs it in a threadpool, so several uploads
+    # analyze in parallel instead of serializing on the event loop (librosa/
+    # essentia are CPU-bound and would otherwise block it).
     raw = file.file.read()
     y, sr = _load_mono(raw)
     key, confidence = detect_key(y, sr)
