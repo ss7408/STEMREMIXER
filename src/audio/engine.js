@@ -175,24 +175,24 @@ class SamplerEngine {
         v.isPlaying = false;
       } else {
         const transport = this.ready ? Tone.getTransport() : null;
-        // If no other loop is running, anchor the grid by restarting the transport
-        // so this loop starts cleanly from its top. Otherwise leave the grid and
-        // drop in at the current phase, locking to whatever's already playing.
         const anyLoop = [...this.voices.values()].some((o) => o !== v && o.isPlaying && o.loop);
-        if (transport && !anyLoop) transport.position = 0;
-        const t = transport ? transport.nextSubdivision("16n") : Tone.now();
-        // Snappy launch on the next 1/16, started *inside* the loop at the
-        // transport's phase so it's locked to the grid — no whole-bar wait.
-        let startOffset = 0;
-        if (transport && rate > 0) {
-          const period = L / rate; // perceived loop length — a whole number of bars
-          const transportSec = transport.seconds + (t - Tone.now());
-          startOffset = ((((transportSec % period) + period) % period) * rate) % L;
+        let t;
+        if (!transport) {
+          t = Tone.now();
+        } else if (!anyLoop) {
+          // First loop: anchor the grid here and start (near) immediately from the
+          // top, so there's no wait when you kick a groove off.
+          transport.position = 0;
+          t = transport.nextSubdivision("16n");
+        } else {
+          // Stacking onto a running groove: come in on the next bar, from the top,
+          // so every loop shares beat 1 and they lock together.
+          t = transport.nextSubdivision("1m");
         }
-        v.grain.start(t, startOffset);
+        v.grain.start(t, 0); // always from the top
         v.isPlaying = true;
         v.startTime = t;
-        v.phaseOffset = startOffset;
+        v.phaseOffset = 0;
       }
     } else {
       v.grain.loop = false;
