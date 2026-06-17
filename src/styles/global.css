@@ -281,6 +281,11 @@ button:disabled { cursor: default; }
 }
 
 /* =====================================================================
+   MASTER FX (saturation + compression on the whole mix)
+   ===================================================================== */
+.master { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 32px; align-items: center; }
+
+/* =====================================================================
    LIBRARY
    ===================================================================== */
 .lib-list { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; max-height: 460px; overflow-y: auto; }
@@ -373,6 +378,7 @@ button:disabled { cursor: default; }
 @media (max-width: 860px) {
   .work { grid-template-columns: 1fr; }
   .deck { grid-template-columns: repeat(4, 1fr); }
+  .master { grid-template-columns: 1fr; }
   .scan { grid-template-columns: 1fr; }
   .lib-list { max-height: 240px; }
   body { overflow: auto; }

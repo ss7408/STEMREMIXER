@@ -79,6 +79,7 @@ export const useStore = create((set, get) => ({
   align: true,
   projectKey: null, // the global key samples lock to
   keyLock: true, // auto harmonic key-matching on/off
+  master: { saturate: 0, compress: 0, makeup: 0 }, // master-bus effects
   analyzing: { active: false, total: 0, done: 0, current: "" },
 
   // --- ingestion ------------------------------------------------------
@@ -191,6 +192,21 @@ export const useStore = create((set, get) => ({
   toggleKeyLock: () => {
     set({ keyLock: !get().keyLock });
     get()._relock();
+  },
+
+  // --- master effects -------------------------------------------------
+  setSaturate: (v) => {
+    engine.setSaturation(v);
+    set((s) => ({ master: { ...s.master, saturate: v } }));
+  },
+  setCompress: (v) => {
+    engine.setCompression(v);
+    set((s) => ({ master: { ...s.master, compress: v } }));
+  },
+  setMakeup: (v) => {
+    v = Math.max(-12, Math.min(12, v));
+    engine.setMakeup(v);
+    set((s) => ({ master: { ...s.master, makeup: v } }));
   },
 
   // --- interaction ----------------------------------------------------

@@ -8,6 +8,7 @@ import Encoders from "./Encoders.jsx";
 import SampleKeys from "./SampleKeys.jsx";
 import Library from "./Library.jsx";
 import Scrubber from "./Scrubber.jsx";
+import MasterFx from "./MasterFx.jsx";
 import { keyLabel } from "../audio/musicTheory.js";
 
 const THEMES = [
@@ -148,6 +149,11 @@ export default function Device() {
       <div className="panel deck-panel">
         <span className="panel-label">Deck · 8</span>
         <SampleKeys />
+      </div>
+
+      <div className="panel master-panel">
+        <span className="panel-label">Master · FX</span>
+        <MasterFx />
       </div>
     </div>
   );

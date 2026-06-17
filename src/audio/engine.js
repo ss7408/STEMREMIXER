@@ -11,6 +11,7 @@
 import * as Tone from "tone";
 
 const FILTER_OPEN = 18000;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 class SamplerEngine {
   constructor() {
@@ -33,20 +34,31 @@ class SamplerEngine {
 
   _buildMaster() {
     const dest = Tone.getDestination();
+    // Master bus: every voice (dry) and every effect return sums into masterIn,
+    // then runs the whole mix through saturation -> compression -> makeup gain
+    // -> limiter -> meter. Saturation and compression are master processors, so
+    // they glue the full mix (effect tails included), unlike the per-sample sends.
     this.masterIn = new Tone.Gain(1);
+    this.saturation = new Tone.Distortion({ distortion: 0.4, oversample: "4x", wet: 0 });
+    // threshold/ratio start a hair inside their limits ([-100,0] / [1,20]) so a
+    // rampTo at the boundary can't overshoot the edge and throw (Tone holds with
+    // a 1e-7 epsilon). ratio ~1 = effectively no compression at rest.
+    this.comp = new Tone.Compressor({ threshold: -0.01, ratio: 1.001, attack: 0.012, release: 0.2, knee: 18 });
+    this.masterOut = new Tone.Gain(1);
     this.limiter = new Tone.Limiter(-1);
     this.meter = new Tone.Meter({ smoothing: 0.8 });
-    this.masterIn.chain(this.limiter, this.meter, dest);
+    this.masterIn.chain(this.saturation, this.comp, this.masterOut, this.limiter, this.meter, dest);
 
     // Shared, fully-wet send returns. Per-voice send gains set how much of each
     // sample feeds them, so reverb / chorus / delay are master effects you dial
-    // in per sound.
+    // in per sound. They return into the master bus so master saturation and
+    // compression process them too.
     this.reverb = new Tone.Reverb({ decay: 3, preDelay: 0.01, wet: 1 });
     this.chorus = new Tone.Chorus({ frequency: 1.2, delayTime: 3.5, depth: 0.7, wet: 1 }).start();
     this.delay = new Tone.FeedbackDelay({ delayTime: "8n", feedback: 0.32, wet: 1 });
-    this.reverb.connect(this.limiter);
-    this.chorus.connect(this.limiter);
-    this.delay.connect(this.limiter);
+    this.reverb.connect(this.masterIn);
+    this.chorus.connect(this.masterIn);
+    this.delay.connect(this.masterIn);
   }
 
   setBpm(bpm) {
@@ -242,6 +254,22 @@ class SamplerEngine {
   setSolo(id, s) {
     const v = this.voices.get(id);
     if (v) v.channel.solo = s; // Tone.Channel handles the shared solo bus
+  }
+
+  // --- master effects (saturation + compression across the whole mix) -
+  // Targets are kept just inside each param's hard range so a rampTo at the
+  // edge can't be held a hair past the limit (Tone throws on out-of-range).
+  setSaturation(amount) {
+    if (this.saturation) this.saturation.wet.rampTo(clamp(amount, 0, 0.999), 0.05);
+  }
+  setCompression(amount) {
+    if (!this.comp) return;
+    const a = clamp(amount, 0, 1);
+    this.comp.threshold.rampTo(Math.min(-0.01, -a * 36), 0.05); // ~0 dB (off) -> -36 dB
+    this.comp.ratio.rampTo(Math.max(1.001, 1 + a * 5), 0.05); // ~1:1 -> 6:1
+  }
+  setMakeup(db) {
+    if (this.masterOut) this.masterOut.gain.rampTo(Tone.dbToGain(clamp(db, -12, 12)), 0.05);
   }
 
   // --- metering / transport -------------------------------------------
