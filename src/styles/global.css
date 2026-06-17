@@ -1,0 +1,267 @@
+/* =====================================================================
+   MOSAIC // TERMINAL
+   A sampler drawn as a CRT. Monochrome phosphor (green default, amber/blue
+   selectable), bitmap type, ASCII waveforms + meters, box-drawing frames,
+   inverse-video selection. No gradients. No rounded glass. Lots of character.
+   ===================================================================== */
+@import "@fontsource/vt323";
+@import "@fontsource/silkscreen";
+
+:root,
+[data-phos="green"] {
+  --phos: #5ef38c;
+  --phos-2: #9bffbf;
+  --phos-dim: #2f7d4d;
+  --phos-faint: #173a24;
+  --phos-glow: rgba(94, 243, 140, 0.45);
+  --bg: #040804;
+  --bg-screen: #060d07;
+}
+[data-phos="amber"] {
+  --phos: #ffb454;
+  --phos-2: #ffd79c;
+  --phos-dim: #835423;
+  --phos-faint: #2c1d09;
+  --phos-glow: rgba(255, 180, 84, 0.4);
+  --bg: #070502;
+  --bg-screen: #0c0803;
+}
+[data-phos="blue"] {
+  --phos: #6b9bff;
+  --phos-2: #acc4ff;
+  --phos-dim: #2f4f96;
+  --phos-faint: #112141;
+  --phos-glow: rgba(107, 155, 255, 0.4);
+  --bg: #030509;
+  --bg-screen: #05080f;
+}
+
+:root {
+  --font-term: "VT323", ui-monospace, "SF Mono", monospace;
+  --font-pixel: "Silkscreen", "VT323", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  /* faint dither dot-grid, like the reference halftones (kept subtle) */
+  background-image: radial-gradient(var(--phos-faint) 0.5px, transparent 0.5px);
+  background-size: 7px 7px;
+  color: var(--phos);
+  font-family: var(--font-term);
+  font-size: 19px;
+  line-height: 1.15;
+  -webkit-font-smoothing: none;
+  letter-spacing: 0.02em;
+}
+button { font-family: inherit; color: inherit; cursor: pointer; border: none; background: none; font-size: inherit; }
+button:disabled { cursor: default; opacity: 0.35; }
+
+::selection { background: var(--phos); color: var(--bg); }
+
+/* scanlines overlay (subtle — the CRT hint, not a filter) */
+.scanlines {
+  position: fixed; inset: 0; z-index: 95; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 4px);
+  mix-blend-mode: multiply;
+}
+.scanlines::after {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(135% 130% at 50% 50%, transparent 72%, rgba(0, 0, 0, 0.22));
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; }
+}
+
+.glow { text-shadow: 0 0 2px var(--phos-glow); }
+.dim { color: var(--phos-dim); }
+.b2 { color: var(--phos-2); }
+.inv { background: var(--phos); color: var(--bg); }
+
+/* terminal buttons: [ LABEL ] that invert on hover */
+.tbtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 12px; border: 1px solid var(--phos-dim); color: var(--phos);
+  text-transform: uppercase; letter-spacing: 0.05em; line-height: 1;
+  transition: background 0.08s steps(2), color 0.08s steps(2);
+}
+.tbtn:hover:not(:disabled) { background: var(--phos); color: var(--bg); border-color: var(--phos); }
+.tbtn.on { background: var(--phos); color: var(--bg); border-color: var(--phos); }
+.tbtn.pixel { font-family: var(--font-pixel); font-size: 11px; padding: 8px 14px; }
+
+/* =====================================================================
+   DEVICE (the CRT)
+   ===================================================================== */
+.stage { min-height: 100dvh; display: grid; place-items: center; padding: 26px; }
+
+.crt {
+  position: relative;
+  width: min(940px, 96vw);
+  overflow: hidden; /* nothing bleeds past the frame */
+  background: var(--bg-screen);
+  border: 1px solid var(--phos-dim);
+  box-shadow: 0 0 0 1px var(--bg), inset 0 0 90px -50px var(--phos-glow);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+/* corner crosshairs (schematic flavour) */
+.crt::before, .crt::after {
+  content: "+ +"; position: absolute; left: 6px; right: 6px;
+  display: flex; justify-content: space-between;
+  color: var(--phos-dim); font-size: 14px; line-height: 1; pointer-events: none;
+}
+.crt::before { top: 3px; }
+.crt::after { bottom: 1px; }
+
+/* status bar */
+.crt-bar {
+  display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap;
+  border: 1px solid var(--phos-dim); padding: 6px 10px; font-size: 16px;
+}
+.crt-brand { font-family: var(--font-pixel); font-size: 12px; letter-spacing: 0.04em; color: var(--phos-2); }
+.crt-brand .star { color: var(--phos-dim); }
+.bar-item { display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.bar-item .k { color: var(--phos-dim); }
+.bar-sp { flex: 1; }
+.bar-vu { letter-spacing: 0; white-space: pre; color: var(--phos); }
+.step { display: inline-flex; align-items: center; gap: 2px; }
+.step button { padding: 0 5px; color: var(--phos-dim); }
+.step button:hover:not(:disabled) { color: var(--phos); }
+
+/* main split. minmax(0,1fr) lets the display column shrink below the (very
+   wide) ASCII pre's min-content instead of blowing the grid out past the frame. */
+.crt-main { display: grid; grid-template-columns: minmax(0, 1fr) 286px; gap: 12px; }
+
+/* labelled box-drawing panel */
+.panel { position: relative; border: 1px solid var(--phos-dim); padding: 14px; min-width: 0; }
+.panel-label {
+  position: absolute; top: -0.62em; left: 10px;
+  background: var(--bg-screen); padding: 0 7px;
+  text-transform: uppercase; letter-spacing: 0.14em; font-size: 15px; color: var(--phos-dim);
+}
+
+/* =====================================================================
+   SCREEN
+   ===================================================================== */
+.scr { position: relative; min-height: 252px; display: flex; flex-direction: column; }
+.scr-vig { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 130% at 50% 40%, transparent 74%, rgba(0,0,0,0.2)); }
+
+/* empty */
+.scr-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.scr-prompt { font-size: 22px; }
+.scr-prompt .cur { color: var(--phos-2); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.scr-empty-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.scr-hint { color: var(--phos-dim); font-size: 16px; }
+
+/* listening */
+.scr-listen { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+.scr-listen .row { display: flex; gap: 10px; align-items: center; }
+.scr-listen .meter { white-space: pre; font-size: 22px; }
+.scr-listen .name { color: var(--phos-dim); }
+
+/* loaded */
+.scr-load { flex: 1; display: flex; flex-direction: column; }
+.scr-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.scr-id { font-size: 22px; color: var(--phos-2); text-transform: uppercase; }
+.scr-role { color: var(--phos-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+.ascii-wave {
+  position: relative; flex: 1; margin: 8px 0; display: flex; align-items: center; min-height: 150px;
+  overflow: hidden;
+}
+.ascii-wave pre {
+  margin: 0; white-space: pre; font-family: var(--font-term); line-height: 0.82; font-size: 15px;
+  color: var(--phos); text-shadow: 0 0 1px var(--phos-glow); width: 100%;
+  letter-spacing: 1px;
+}
+.wave-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--phos-2); box-shadow: 0 0 8px var(--phos-2); opacity: 0; }
+.scr-meta { display: flex; gap: 18px; color: var(--phos-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.scr-meta b { color: var(--phos); font-weight: 400; }
+.scr-meta .lit { color: var(--phos-2); }
+
+/* =====================================================================
+   PARAMS (ascii faders)
+   ===================================================================== */
+.params { display: flex; flex-direction: column; justify-content: center; gap: 13px; min-width: 0; }
+.params.disabled { opacity: 0.4; pointer-events: none; }
+.fader { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fader-top { display: flex; justify-content: space-between; text-transform: uppercase; letter-spacing: 0.06em; }
+.fader-top .v { color: var(--phos-2); }
+.fader-bar {
+  font-size: 17px; white-space: pre; cursor: ew-resize; user-select: none; touch-action: none;
+  line-height: 1; color: var(--phos); letter-spacing: 0.5px; overflow: hidden;
+}
+.fader-bar:hover { color: var(--phos-2); }
+.fader .lead { color: var(--phos-dim); }
+
+/* =====================================================================
+   KEY DECK
+   ===================================================================== */
+.deck { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.cell {
+  position: relative; border: 1px solid var(--phos-dim); padding: 8px 10px 9px;
+  min-height: 70px; display: flex; flex-direction: column; gap: 2px; text-align: left;
+  color: var(--phos);
+  transition: background 0.06s steps(2), color 0.06s steps(2);
+}
+.cell:hover { background: var(--phos-faint); }
+.cell.sel { border-color: var(--phos); }
+.cell.on { background: var(--phos); color: var(--bg); border-color: var(--phos); }
+.cell-top { display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
+.cell-letter { color: var(--phos-dim); }
+.cell.on .cell-letter { color: var(--bg); }
+.cell-stat { animation: blink 0.7s steps(1) infinite; }
+.cell-name { font-size: 17px; text-transform: uppercase; line-height: 1.05; margin-top: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-meta { color: var(--phos-dim); text-transform: uppercase; font-size: 14px; letter-spacing: 0.04em; }
+.cell.on .cell-meta { color: var(--bg); }
+.cell.ghost { border-style: dashed; opacity: 0.4; }
+.cell.ghost::after { content: "EMPTY"; color: var(--phos-dim); font-size: 14px; margin: auto; }
+.cell[draggable="true"] { cursor: grab; }
+.cell[draggable="true"]:active { cursor: grabbing; }
+.cell.empty { border-style: dashed; }
+.cell-drop { margin: auto; color: var(--phos-dim); letter-spacing: 0.12em; font-size: 15px; }
+.cell.drop { background: var(--phos-faint); border-color: var(--phos); }
+.cell.muted { opacity: 0.55; }
+
+/* =====================================================================
+   LIBRARY (drag source) + layout
+   ===================================================================== */
+.crt-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.crt-body.has-lib { grid-template-columns: 200px minmax(0, 1fr); }
+.crt-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.lib-panel { min-width: 0; }
+.lib-list { display: flex; flex-direction: column; gap: 4px; max-height: 432px; overflow-y: auto; }
+.lib-list.filedrop { outline: 1px dashed var(--phos); outline-offset: 2px; }
+.lib-add {
+  border: 1px dashed var(--phos-dim); padding: 5px; color: var(--phos-dim);
+  text-transform: uppercase; letter-spacing: 0.08em; font-size: 14px; line-height: 1;
+}
+.lib-add:hover { border-color: var(--phos); color: var(--phos); background: var(--phos-faint); }
+.lib-row {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  border: 1px solid var(--phos-dim); padding: 5px 7px; cursor: grab; user-select: none;
+  font-size: 15px; line-height: 1.1;
+}
+.lib-row:hover { background: var(--phos-faint); }
+.lib-row:active { cursor: grabbing; }
+.lib-row.sel { border-color: var(--phos); }
+.lib-row.on { background: var(--phos); color: var(--bg); border-color: var(--phos); }
+.lib-row.muted { opacity: 0.55; }
+.lib-letter { color: var(--phos-dim); }
+.lib-row.on .lib-letter { color: var(--bg); }
+.lib-name { flex: 1; min-width: 0; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-ms { display: flex; gap: 3px; }
+.ms { width: 19px; height: 18px; display: grid; place-items: center; border: 1px solid var(--phos-dim); color: var(--phos-dim); font-size: 13px; line-height: 1; }
+.ms:hover { color: var(--phos); border-color: var(--phos); }
+.ms.on { background: var(--phos); color: var(--bg); border-color: var(--phos); }
+.lib-row.on .ms { border-color: var(--bg); color: var(--bg); }
+
+@media (max-width: 720px) {
+  .crt-body.has-lib { grid-template-columns: 1fr; }
+  .crt-main { grid-template-columns: 1fr; }
+  .deck { grid-template-columns: repeat(2, 1fr); }
+  body { overflow: auto; }
+}
