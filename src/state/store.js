@@ -17,15 +17,23 @@ import { suggestPitchShift, transposeKey, noteName } from "../audio/musicTheory.
 // behaviour identical).
 const KEY_CONF_MIN = 0.4;
 const keyTrusted = (s) => s.keyConfidence == null || s.keyConfidence >= KEY_CONF_MIN;
+// Only pitched material gets key-locked. Drums / fx / textures still get a key
+// from the analyzer (it always reports a best-correlation guess), but transposing
+// them just detunes the groove — so they never vote for the project key and are
+// never shifted.
+const TONAL_TYPES = new Set(["bass", "chord", "melody", "vocal"]);
+const isTonal = (s) => TONAL_TYPES.has(s.detectedType);
 
 // Merge a server (Python) analysis result onto an existing sample. Tempo / key /
 // type win over the in-browser heuristic; loop-status and tags are re-derived.
 function applyRemote(smp, remote) {
   const next = { ...smp, analyzedBy: "python" };
-  if ("bpm" in remote) next.bpm = remote.bpm;
-  if ("key" in remote) {
+  // Only let the server win when it actually found something — a null bpm/key
+  // must not clobber a good heuristic value (and silently demote a loop).
+  if (remote.bpm != null) next.bpm = remote.bpm;
+  if (remote.key) {
     next.key = remote.key;
-    next.rootPitch = remote.key ? noteName(remote.key.tonic) : null;
+    next.rootPitch = noteName(remote.key.tonic);
     next.keyConfidence = remote.keyConfidence ?? null;
   }
   if (remote.detectedType) next.detectedType = remote.detectedType;
@@ -69,7 +77,7 @@ function enrich(meta) {
 function pickProjectKey(samples) {
   const counts = new Map();
   for (const s of samples) {
-    if (!s.key || !keyTrusted(s)) continue; // ignore low-confidence keys in the vote
+    if (!s.key || !keyTrusted(s) || !isTonal(s)) continue; // only confident, pitched keys vote
     const k = `${s.key.tonic}-${s.key.mode}`;
     counts.set(k, (counts.get(k) || 0) + 1);
   }
@@ -83,6 +91,27 @@ function pickProjectKey(samples) {
     }
   }
   return best; // null when nothing is tonal (all drums / fx)
+}
+
+// The project tempo every loop locks to. Default to the tempo the most loops
+// share (modal), falling back to the median, so the fewest sounds have to stretch
+// far — minimal stretch keeps them clean and tight.
+function pickProjectBpm(samples) {
+  const loops = samples.filter((s) => s.loop && s.bpm);
+  if (!loops.length) return null;
+  const counts = new Map();
+  for (const s of loops) counts.set(s.bpm, (counts.get(s.bpm) || 0) + 1);
+  let mode = null;
+  let modeN = 0;
+  for (const [bpm, n] of counts) {
+    if (n > modeN) {
+      modeN = n;
+      mode = bpm;
+    }
+  }
+  if (modeN > 1) return mode; // a clearly shared tempo
+  const sorted = loops.map((s) => s.bpm).sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]; // else the median
 }
 
 const SLOTS = 8;
@@ -107,6 +136,7 @@ export const useStore = create((set, get) => ({
   selectedId: null,
   playing: {},
   bpm: DEMO_HOME.bpm,
+  projectBpmAuto: true, // tempo was auto-derived from the loops (vs. user-set)
   masterPitch: 0,
   align: true,
   projectKey: null, // the global key samples lock to
@@ -190,6 +220,7 @@ export const useStore = create((set, get) => ({
     const projectKey = get().projectKey || pickProjectKey(out);
     set({ view: "ready", deck: buildDeck(out), selectedId: out[0]?.id ?? null, projectKey, analyzing: { active: false, total: 0, done: 0, current: "" } });
     get()._relock();
+    get()._adoptTempo(out); // lock loops to a tempo derived from the loaded loops
     // Pass 2 — background: ask the Python service for tempo/key/type and snap the
     // results in as they arrive. Not awaited, so the UI is never blocked on it.
     get()._enrichRemote(pending);
@@ -219,12 +250,25 @@ export const useStore = create((set, get) => ({
     // set one by hand) and re-lock everything to it.
     if (get().projectKeyAuto) set({ projectKey: pickProjectKey(get().samples) });
     get()._relock();
+    // Refined bpms can shift the shared tempo; re-adopt it, but not mid-playback
+    // (that would yank a running loop's speed). User-set tempo is never touched.
+    if (!Object.values(get().playing).some(Boolean)) get()._adoptTempo();
+  },
+
+  // Adopt a project tempo derived from the loops (unless the user set one), so
+  // every loop locks to one shared grid at the least possible stretch.
+  _adoptTempo: (samples) => {
+    if (!get().projectBpmAuto) return;
+    const pb = pickProjectBpm(samples || get().samples);
+    if (!pb) return;
+    engine.setBpm(pb);
+    set({ bpm: pb });
   },
 
   reset: () => {
     engine.stopAll();
     get().samples.forEach((s) => engine.removeVoice(s.id));
-    set({ view: "empty", samples: [], deck: [], selectedId: null, playing: {}, projectKey: null, projectKeyAuto: true, enriching: 0 });
+    set({ view: "empty", samples: [], deck: [], selectedId: null, playing: {}, projectKey: null, projectKeyAuto: true, projectBpmAuto: true, enriching: 0 });
   },
 
   // --- key lock: harmonically match every sample to the project key ---
@@ -234,8 +278,12 @@ export const useStore = create((set, get) => ({
   _relock: () => {
     const { samples, projectKey, keyLock } = get();
     const next = samples.map((s) => {
+      // Only shift confident, pitched samples; never transpose drums/fx.
       // suggestPitchShift returns { shift, score, ... }; we only need the semitones.
-      const shift = keyLock && s.key && projectKey && keyTrusted(s) ? suggestPitchShift(s.key, projectKey).shift : 0;
+      const shift =
+        keyLock && isTonal(s) && s.key && projectKey && keyTrusted(s)
+          ? suggestPitchShift(s.key, projectKey).shift
+          : 0;
       engine.setKeyShift(s.id, shift);
       return s.keyShift === shift ? s : { ...s, keyShift: shift };
     });
@@ -302,7 +350,7 @@ export const useStore = create((set, get) => ({
   setBpm: (bpm) => {
     bpm = Math.max(60, Math.min(200, Math.round(bpm)));
     engine.setBpm(bpm);
-    set({ bpm });
+    set({ bpm, projectBpmAuto: false }); // user took the wheel; stop auto-deriving
   },
 
   toggleAlign: () => {
