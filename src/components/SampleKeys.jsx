@@ -7,6 +7,17 @@ import { keyShort } from "../audio/musicTheory.js";
 // The keyboard shortcuts that fire each slot (Q W E R / A S D F), shown top-left.
 const KEYCAPS = ["Q", "W", "E", "R", "A", "S", "D", "F"];
 
+// Lower-cased key -> slot index, so a physical key press fires the matching cell.
+const KEY_TO_SLOT = KEYCAPS.reduce((m, k, i) => ((m[k.toLowerCase()] = i), m), {});
+
+// Don't hijack keystrokes while the user is typing in a field.
+const isTyping = (el) =>
+  !!el &&
+  (el.isContentEditable ||
+    el.tagName === "INPUT" ||
+    el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT");
+
 // The deck: 8 playable slots. Tap to play; drag a slot to swap, or drop a
 // Library sample in to assign it. Playing slots go inverse-video and every cell
 // carries its own playhead, so several simultaneously-playing samples each show
@@ -42,6 +53,23 @@ export default function SampleKeys() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [deck, playing]);
+
+  // QWERTY launch: Q W E R / A S D F fire slots 0–7. Ignore key auto-repeat and
+  // any presses while a text field is focused.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTyping(e.target)) return;
+      const slot = KEY_TO_SLOT[e.key.toLowerCase()];
+      if (slot === undefined) return;
+      const id = deck[slot];
+      if (!id) return;
+      e.preventDefault();
+      trigger(id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deck, trigger]);
 
   const onDrop = (e, slot) => {
     e.preventDefault();
