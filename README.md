@@ -12,6 +12,19 @@ faders shape the selected sound, and that's it.
 Phosphor is themeable from the status bar: **GRN** (green), **AMB** (amber),
 **BLU** (Minitel blue).
 
+## Screenshots
+
+Drop a folder (or hit **TRY DEMO**) and Mosaic analyzes BPM · key · type · trim
+on-device — no upload, no account:
+
+![Mosaic — upload screen](docs/upload-screen.png)
+
+Then play: a library bin, a 3D wireframe of the selected sample, ASCII faders,
+the 8-slot key deck and master FX. Press **Q W E R / A S D F** to punch the deck,
+and click a sample's `[letter]` to correct its type:
+
+![Mosaic — the device](docs/device.png)
+
 ```bash
 npm install
 npm run dev        # http://localhost:5173
