@@ -30,6 +30,7 @@ function Loaded() {
   const keyLock = useStore((s) => s.keyLock);
   const projectKey = useStore((s) => s.projectKey);
   const cycleType = useStore((s) => s.cycleType);
+  const toggleLoop = useStore((s) => s.toggleLoop);
   const headRef = useRef(null);
   const posRef = useRef(null);
 
@@ -64,7 +65,13 @@ function Loaded() {
       <div className="disp-top">
         <span className="disp-name glow">{sample.name}</span>
         <span className="disp-role">
-          <span className="role-type edit" title="Click to change type" onClick={() => cycleType(sample.id)}>[{tm.letter}] {tm.full}</span> · {sample.loop ? "LOOP" : "ONE-SHOT"}
+          <span className="role-type edit" title="Click to change type" onClick={() => cycleType(sample.id)}>[{tm.letter}] {tm.full}</span>
+          {" · "}
+          <span
+            className="role-loop edit"
+            title={`${sample.loop ? "Loop — latches on/off" : "One-shot — punches on every press"} · click to switch`}
+            onClick={() => toggleLoop(sample.id)}
+          >{sample.loop ? "LOOP" : "ONE-SHOT"}</span>
         </span>
       </div>
 

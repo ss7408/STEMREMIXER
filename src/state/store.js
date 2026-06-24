@@ -37,7 +37,7 @@ function applyRemote(smp, remote) {
     next.keyConfidence = remote.keyConfidence ?? null;
   }
   if (remote.detectedType && !smp.userTyped) next.detectedType = remote.detectedType;
-  next.loop = isLoop(next);
+  if (!smp.userLooped) next.loop = isLoop(next);
   next.tags = buildTags({
     detectedType: next.detectedType,
     bpm: next.bpm,
@@ -365,7 +365,7 @@ export const useStore = create((set, get) => ({
         const i = EDITABLE_TYPES.indexOf(smp.detectedType);
         const detectedType = EDITABLE_TYPES[(i + 1) % EDITABLE_TYPES.length];
         const next = { ...smp, detectedType, userTyped: true };
-        next.loop = isLoop(next);
+        next.loop = next.userLooped ? next.loop : isLoop(next);
         next.tags = buildTags({
           detectedType,
           bpm: next.bpm,
@@ -375,6 +375,19 @@ export const useStore = create((set, get) => ({
         });
         return next;
       }),
+    }));
+    const smp = get().samples.find((x) => x.id === id);
+    if (smp) engine.updateVoiceTiming(id, { baseBpm: smp.bpm || null, loop: smp.loop });
+  },
+
+  // Flip a sample between LOOP (tap-on / tap-off latch) and ONE-SHOT (punches
+  // from the top on every press). userLooped pins the choice so auto detection
+  // and a late server result won't re-derive over it.
+  toggleLoop: (id) => {
+    set((s) => ({
+      samples: s.samples.map((smp) =>
+        smp.id === id ? { ...smp, loop: !smp.loop, userLooped: true } : smp
+      ),
     }));
     const smp = get().samples.find((x) => x.id === id);
     if (smp) engine.updateVoiceTiming(id, { baseBpm: smp.bpm || null, loop: smp.loop });

@@ -408,10 +408,10 @@ button:disabled { cursor: default; }
 .scan-fields i { font-style: normal; color: var(--phos-dim); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
 .scan-fields b { color: var(--phos-2); font-weight: 400; font-size: 18px; }
 
-/* clickable type letters — click a sample's [letter] to cycle its type */
-.cell-letter.edit, .lib-letter.edit, .role-type.edit { cursor: pointer; }
+/* clickable metadata — [letter] cycles type, LOOP/ONE-SHOT switches trigger mode */
+.cell-letter.edit, .lib-letter.edit, .role-type.edit, .role-loop.edit { cursor: pointer; }
 .cell-letter.edit:hover, .lib-letter.edit:hover { color: var(--phos); }
-.role-type.edit:hover { color: var(--phos-2); }
+.role-type.edit:hover, .role-loop.edit:hover { color: var(--phos-2); }
 .cell.on .cell-letter.edit:hover, .lib-row.on .lib-letter.edit:hover { color: var(--bg); }
 
 /* =====================================================================
