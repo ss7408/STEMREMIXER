@@ -30,6 +30,7 @@ export default function SampleKeys() {
   const trigger = useStore((s) => s.trigger);
   const assignSlot = useStore((s) => s.assignSlot);
   const swapSlots = useStore((s) => s.swapSlots);
+  const cycleType = useStore((s) => s.cycleType);
   const [hover, setHover] = useState(null);
   const headRefs = useRef([]);
 
@@ -119,7 +120,11 @@ export default function SampleKeys() {
               <span className="cell-flags">
                 {s && s.mute ? <span className="flag mute" title="Muted">M</span> : null}
                 {s && s.solo ? <span className="flag solo" title="Soloed">S</span> : null}
-                <span className="cell-letter">[{tm ? tm.letter : "—"}]</span>
+                <span
+                  className={s ? "cell-letter edit" : "cell-letter"}
+                  title={s ? `Type: ${tm.full} — click to change` : undefined}
+                  onClick={(e) => { if (s) { e.stopPropagation(); cycleType(s.id); } }}
+                >[{tm ? tm.letter : "—"}]</span>
               </span>
             </div>
             {s ? (

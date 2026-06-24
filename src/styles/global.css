@@ -12,7 +12,7 @@
 [data-phos="cyan"] {
   --phos: #00e8ff;
   --phos-2: #b4f7ff;
-  --phos-dim: #0a4a5a;
+  --phos-dim: #4f9aae;
   --phos-faint: #082030;
   --phos-grid: #0a3848;
   --phos-glow: rgba(0, 232, 255, 0.45);
@@ -23,7 +23,7 @@
 [data-phos="green"] {
   --phos: #5ef38c;
   --phos-2: #9bffbf;
-  --phos-dim: #2f7d4d;
+  --phos-dim: #57aa79;
   --phos-faint: #173a24;
   --phos-grid: #123a1f;
   --phos-glow: rgba(94, 243, 140, 0.45);
@@ -34,7 +34,7 @@
 [data-phos="amber"] {
   --phos: #ffb454;
   --phos-2: #ffd79c;
-  --phos-dim: #835423;
+  --phos-dim: #bf9050;
   --phos-faint: #2c1d09;
   --phos-grid: #3a2912;
   --phos-glow: rgba(255, 180, 84, 0.4);
@@ -45,7 +45,7 @@
 [data-phos="blue"] {
   --phos: #6b9bff;
   --phos-2: #acc4ff;
-  --phos-dim: #2f4f96;
+  --phos-dim: #7a93cf;
   --phos-faint: #112141;
   --phos-grid: #16284a;
   --phos-glow: rgba(107, 155, 255, 0.4);
@@ -83,12 +83,12 @@ button:disabled { cursor: default; }
 /* scanlines overlay */
 .scanlines {
   position: fixed; inset: 0; z-index: 95; pointer-events: none;
-  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 4px);
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 5px);
   mix-blend-mode: multiply;
 }
 .scanlines::after {
   content: ""; position: absolute; inset: 0;
-  background: radial-gradient(135% 130% at 50% 50%, transparent 72%, rgba(0, 0, 0, 0.22));
+  background: radial-gradient(135% 130% at 50% 50%, transparent 76%, rgba(0, 0, 0, 0.16));
 }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; }
@@ -139,7 +139,7 @@ button:disabled { cursor: default; }
 .mod-label {
   position: absolute; top: -7px; left: 8px; padding: 0 4px;
   background: var(--bg-screen);
-  font-family: var(--font-label); font-size: 10px; letter-spacing: 0.18em;
+  font-family: var(--font-label); font-size: 11px; letter-spacing: 0.16em;
   color: var(--phos-dim); text-transform: uppercase;
 }
 
@@ -213,7 +213,7 @@ button:disabled { cursor: default; }
 .panel-label {
   position: absolute; top: -7px; left: 10px; padding: 0 6px;
   background: var(--bg-screen);
-  font-family: var(--font-label); font-size: 10px; letter-spacing: 0.18em;
+  font-family: var(--font-label); font-size: 11px; letter-spacing: 0.16em;
   color: var(--phos-dim); text-transform: uppercase;
 }
 .work { display: grid; grid-template-columns: 220px minmax(0, 1fr) 280px; gap: 14px; }
@@ -277,7 +277,7 @@ button:disabled { cursor: default; }
 .cell-letter { color: var(--phos-dim); }
 .cell.on .cell-letter { color: var(--bg); }
 .cell-name { font-size: 14px; text-transform: uppercase; line-height: 1.05; margin-top: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cell-meta { color: var(--phos-dim); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-meta { color: var(--phos-dim); text-transform: uppercase; font-size: 12px; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell.on .cell-meta { color: var(--bg); }
 .cell.empty { border-style: dashed; }
 .cell-drop { margin: auto; color: var(--phos-dim); letter-spacing: 0.12em; font-size: 13px; }
@@ -407,6 +407,12 @@ button:disabled { cursor: default; }
 .scan-fields { display: flex; gap: 18px; padding-top: 10px; border-top: 1px solid var(--phos-grid); flex-wrap: wrap; }
 .scan-fields i { font-style: normal; color: var(--phos-dim); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
 .scan-fields b { color: var(--phos-2); font-weight: 400; font-size: 18px; }
+
+/* clickable type letters — click a sample's [letter] to cycle its type */
+.cell-letter.edit, .lib-letter.edit, .role-type.edit { cursor: pointer; }
+.cell-letter.edit:hover, .lib-letter.edit:hover { color: var(--phos); }
+.role-type.edit:hover { color: var(--phos-2); }
+.cell.on .cell-letter.edit:hover, .lib-row.on .lib-letter.edit:hover { color: var(--bg); }
 
 /* =====================================================================
    RESPONSIVE

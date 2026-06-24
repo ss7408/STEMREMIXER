@@ -29,6 +29,7 @@ function Loaded() {
   const align = useStore((s) => s.align);
   const keyLock = useStore((s) => s.keyLock);
   const projectKey = useStore((s) => s.projectKey);
+  const cycleType = useStore((s) => s.cycleType);
   const headRef = useRef(null);
   const posRef = useRef(null);
 
@@ -62,7 +63,9 @@ function Loaded() {
     <div className="disp">
       <div className="disp-top">
         <span className="disp-name glow">{sample.name}</span>
-        <span className="disp-role">[{tm.letter}] {tm.full} · {sample.loop ? "LOOP" : "ONE-SHOT"}</span>
+        <span className="disp-role">
+          <span className="role-type edit" title="Click to change type" onClick={() => cycleType(sample.id)}>[{tm.letter}] {tm.full}</span> · {sample.loop ? "LOOP" : "ONE-SHOT"}
+        </span>
       </div>
 
       <div className="disp-mesh">

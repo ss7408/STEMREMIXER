@@ -12,6 +12,7 @@ export default function Library() {
   const select = useStore((s) => s.select);
   const toggleMute = useStore((s) => s.toggleMute);
   const toggleSolo = useStore((s) => s.toggleSolo);
+  const cycleType = useStore((s) => s.cycleType);
   const addFiles = useStore((s) => s.addFiles);
   const inputRef = useRef(null);
   const [over, setOver] = useState(false);
@@ -51,7 +52,7 @@ export default function Library() {
             onClick={() => select(s.id)}
             title="Drag onto a deck slot"
           >
-            <span className="lib-letter">[{tm.letter}]</span>
+            <span className="lib-letter edit" title={`Type: ${tm.full} — click to change`} onClick={(e) => { e.stopPropagation(); cycleType(s.id); }}>[{tm.letter}]</span>
             <span className="lib-name">{s.name}</span>
             <span className="lib-ms">
               <button className={`ms m${s.mute ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleMute(s.id); }} title={s.mute ? "Muted — click to unmute" : "Mute this sample"} aria-pressed={s.mute}>M</button>

@@ -36,7 +36,7 @@ function applyRemote(smp, remote) {
     next.rootPitch = noteName(remote.key.tonic);
     next.keyConfidence = remote.keyConfidence ?? null;
   }
-  if (remote.detectedType) next.detectedType = remote.detectedType;
+  if (remote.detectedType && !smp.userTyped) next.detectedType = remote.detectedType;
   next.loop = isLoop(next);
   next.tags = buildTags({
     detectedType: next.detectedType,
@@ -48,11 +48,23 @@ function applyRemote(smp, remote) {
   return next;
 }
 
+// Samples shorter than this are one-shots: they punch from the top on every
+// press (MPC-style) instead of latching on/off. Auto loop/type detection is
+// unreliable, so length is the signal we trust — and toggling a short hit off
+// mid-finger-drum feels broken.
+const MIN_LOOP_SEC = 1.2;
+
 function isLoop(meta) {
   if (meta.detectedType === "fx") return false;
+  if (meta.duration != null && meta.duration < MIN_LOOP_SEC) return false;
   if (meta.bpm == null && meta.detectedType !== "texture") return false;
   return true;
 }
+
+// Types the user can cycle through by clicking a sample's [letter]. Auto
+// detection only seeds the value; this lets you correct it. ("unknown" isn't
+// offered — it's just the fallback for an unrecognised value.)
+const EDITABLE_TYPES = ["drum", "bass", "chord", "melody", "vocal", "fx", "texture"];
 
 function enrich(meta) {
   return {
@@ -341,6 +353,31 @@ export const useStore = create((set, get) => ({
       set((s) => ({ playing: { ...s.playing, [id]: true } }));
       setTimeout(() => set((s) => ({ playing: { ...s.playing, [id]: false } })), 200);
     }
+  },
+
+  // Manually correct a sample's type — auto detection is only a starting point.
+  // Re-derives loop-status + tags and re-stamps the voice so it takes effect now;
+  // userTyped stops a late server result from clobbering the manual choice.
+  cycleType: (id) => {
+    set((s) => ({
+      samples: s.samples.map((smp) => {
+        if (smp.id !== id) return smp;
+        const i = EDITABLE_TYPES.indexOf(smp.detectedType);
+        const detectedType = EDITABLE_TYPES[(i + 1) % EDITABLE_TYPES.length];
+        const next = { ...smp, detectedType, userTyped: true };
+        next.loop = isLoop(next);
+        next.tags = buildTags({
+          detectedType,
+          bpm: next.bpm,
+          key: next.key,
+          energy: next.energy,
+          transientDensity: next.transientDensity,
+        });
+        return next;
+      }),
+    }));
+    const smp = get().samples.find((x) => x.id === id);
+    if (smp) engine.updateVoiceTiming(id, { baseBpm: smp.bpm || null, loop: smp.loop });
   },
 
   stopAll: () => {
